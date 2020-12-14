@@ -25,37 +25,45 @@ struct semaphore sem;
 
 
 char stred[100];
+char upis[] = "string=";
+char brisanje[] = "clear";
+char brisanje_space[] = "shrink";
+char dodavanje[] = "append=";
+char brisanje_br_kar[] = "truncate=";
+char brisanje_pojave[] = "remove=";
+
 int pos = 0;
 int endRead = 0;
 
-int lifo_open(struct inode *pinode, struct file *pfile);
-int lifo_close(struct inode *pinode, struct file *pfile);
-ssize_t lifo_read(struct file *pfile, char __user *buffer, size_t length, loff_t *offset);
-ssize_t lifo_write(struct file *pfile, const char __user *buffer, size_t length, loff_t *offset);
+int stred_open(struct inode *pinode, struct file *pfile);
+int stred_close(struct inode *pinode, struct file *pfile);
+ssize_t stred_read(struct file *pfile, char __user *buffer, size_t length, loff_t *offset);
+ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length, loff_t *offset);
+
 
 struct file_operations my_fops =
 {
 	.owner = THIS_MODULE,
-	.open = lifo_open,
-	.read = lifo_read,
-	.write = lifo_write,
-	.release = lifo_close,
+	.open = stred_open,
+	.read = stred_read,
+	.write = stred_write,
+	.release = stred_close,
 };
 
 
-int lifo_open(struct inode *pinode, struct file *pfile) 
+int stred_open(struct inode *pinode, struct file *pfile) 
 {
 		printk(KERN_INFO "Succesfully opened stred\n");
 		return 0;
 }
 
-int lifo_close(struct inode *pinode, struct file *pfile) 
+int stred_close(struct inode *pinode, struct file *pfile) 
 {
 		printk(KERN_INFO "Succesfully closed stred\n");
 		return 0;
 }
 
-ssize_t lifo_read(struct file *pfile, char __user *buffer, size_t length, loff_t *offset) 
+ssize_t stred_read(struct file *pfile, char __user *buffer, size_t length, loff_t *offset) 
 {
 	int ret;
 	char buff[BUFF_SIZE];
@@ -67,7 +75,7 @@ ssize_t lifo_read(struct file *pfile, char __user *buffer, size_t length, loff_t
 
 	if(down_interruptible(&sem))
 		return -ERESTARTSYS;
-	while(pos == 0)
+	while(pos <= 0)
 	{
 		up(&sem);
 		if(wait_event_interruptible(readQ,(pos>0)))
@@ -79,9 +87,14 @@ ssize_t lifo_read(struct file *pfile, char __user *buffer, size_t length, loff_t
 
 	if(pos > 0)
 	{
-		pos --;
-		len = scnprintf(buff, BUFF_SIZE, "%c ", stred[pos]);
-		ret = copy_to_user(buffer, buff, len);
+	  
+	  //int i = 0;
+	  //for(i = 0; i<pos; i++) 
+		len = scnprintf(buff, BUFF_SIZE, "%s \n", stred);
+		ret = copy_to_user(buffer, buff, len);       //procesi iz korisnickog prostora\
+nemaju pristup memorijskim adresama kernela, te se niz iz kernela kopira u korisnicki adresni\
+prostor (copy_to_user)(return: broj NEuspesno kopiranih bajtova)
+		
 		if(ret)
 			return -EFAULT;
 		printk(KERN_INFO "Succesfully read\n");
@@ -89,7 +102,7 @@ ssize_t lifo_read(struct file *pfile, char __user *buffer, size_t length, loff_t
 	}
 	else
 	{
-			printk(KERN_WARNING "Lifo is empty\n"); 
+			printk(KERN_WARNING "Failed to read \n"); 
 	}
 
 	up(&sem);
@@ -98,45 +111,131 @@ ssize_t lifo_read(struct file *pfile, char __user *buffer, size_t length, loff_t
 	return len;
 }
 
-ssize_t lifo_write(struct file *pfile, const char __user *buffer, size_t length, loff_t *offset) 
+ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length, loff_t *offset) 
 {
 	char buff[BUFF_SIZE];
-	int value;
+	char input[BUFF_SIZE];
 	int ret;
 
-	ret = copy_from_user(buff, buffer, length);
+	ret = copy_from_user(buff, buffer, length); //slicno kao kod copy_to_user(return: \
+broj NEuspesno kopiranih bajtova)
 	if(ret)
 		return -EFAULT;
 	buff[length-1] = '\0';
 
 	if(down_interruptible(&sem))
 		return -ERESTARTSYS;
-	while(pos == 10)
+	while(pos >= 100)
 	{
 		up(&sem);
-		if(wait_event_interruptible(writeQ,(pos<10)))
+		if(wait_event_interruptible(writeQ,(pos<100)))
 			return -ERESTARTSYS;
 		if(down_interruptible(&sem))
 			return -ERESTARTSYS;
 	}
 
-	if(pos<10)
+	if(pos<100)
 	{
-		ret = sscanf(buff,"%d",&value);
-		if(ret==1)//one parameter parsed in sscanf
+	  int i = 0;
+	  for(i=0; i<length; i++)
+	    input[i] = buff[i];
+	    // ret = sscanf(buff,"%s",input); <- ne radi?
+	  ret = length;
+	  input[ret-1] = '\0';
+
+	      if(!strncmp(input,upis,strlen(upis))){   //UPIS STRINGA U BAFER
+		if(ret<= 100-pos && ret != 0)          //ima dovoljno mesta u nizu za string
 		{
-			printk(KERN_INFO "Succesfully wrote value %d", value); 
-			lifo[pos] = value; 
-			pos=pos+1;
+		  printk(KERN_INFO "Succesfully wrote string "); 
+		        stred[0] = '\0';
+		        for(i=0; i<ret; i++)
+			  {
+			    stred[i] = input[i+strlen(upis)];
+			  }
+			pos=strlen(stred);
+			stred[pos] = '\0';
+		}
+		else if(ret == 0)
+		{
+			printk(KERN_WARNING "Failed to write string\n");
 		}
 		else
 		{
-			printk(KERN_WARNING "Wrong command format\n");
+		        printk(KERN_WARNING "Not enough space to write string");
 		}
+	      }else if(!strncmp(input,brisanje,strlen(brisanje))) //BRISANJE CITAVOG STRINGA
+	      {
+		stred[0] = '\0';
+		pos = 0;
+	      }else if(!strncmp(input,brisanje_space,strlen(brisanje_space)))//BRISANJE SPACE-ova
+	      {
+		int i = 0;
+		while(stred[0] == ' ')
+		  {
+		    for(i=0;i<pos;i++)
+		      {
+			stred[i] = stred[i+1];
+		      }
+		    pos--;
+		    stred[pos] = '0';
+		  }
+		while(stred[pos-1]== ' ')
+		{
+		  stred[pos-1] = '\0';
+		  pos--;
+		}
+		stred[pos] = '\0';
+	      }else if(!strncmp(input,dodavanje,strlen(dodavanje)))//KONKATENACIJA
+	      {
+		if(ret<= 100-pos && ret != 0)//ima dovoljno mesta u nizu za string
+		{
+		  printk(KERN_INFO "Succesfully wrote string "); 
+		  for(i=0;i<ret;i++)
+		    {
+		      stred[pos+i] = input[i+strlen(dodavanje)];
+		    }
+		        pos = pos + ret;
+			stred[pos] = '\0';
+		}
+		else if(ret == 0)
+		{
+			printk(KERN_WARNING "Failed to write string\n");
+		}
+		else
+		{
+		        printk(KERN_WARNING "Not enough space to write string");
+		}
+
+	      }else if(!strncmp(input,brisanje_br_kar,strlen(brisanje_br_kar)))//BRISANJE KARAKTERA
+	      {
+		int br=0;
+		char dummy[] = {0};
+		sscanf(input,"%s" "%d",dummy, &br);
+		pos = pos-br;
+		if(pos < 0)
+		  pos = 0;
+		stred[pos] = '\0';
+	      }else if(!strncmp(input,brisanje_pojave,strlen(brisanje_pojave)))//BRISANJE POJAVE
+	      {
+		char needle[] = {0};
+		for(i=0;i<strlen(input)-strlen(brisanje_pojave);i++)
+		  {
+		    needle[i] = input[i+strlen(brisanje_pojave)];
+		  }
+		needle[strlen(brisanje_pojave)] = '\0';
+		//while(strstr(stred,needle) != null)
+		//{
+		  
+		//}
+	      }else
+              {
+		printk(KERN_WARNING "Lose formatirana komanda!");
+	      }//kraj bloka za formtiranje stringa
 	}
+	      
 	else
 	{
-		printk(KERN_WARNING "Lifo is full\n"); 
+		printk(KERN_WARNING "Buffer is full\n"); 
 	}
 
 	up(&sem);
@@ -148,13 +247,14 @@ ssize_t lifo_write(struct file *pfile, const char __user *buffer, size_t length,
 static int __init stred_init(void)
 {
    int ret = 0;
-	int i=0;
+   //	int i=0;
 	
 	sema_init(&sem,1);
 
 	//Initialize array
-	for (i=0; i<100; i++)
-		stred[i] = 0;
+	stred[0] = '\0';
+	//	for (i=0; i<100; i++)
+	//	stred[i] = 0;
 
    ret = alloc_chrdev_region(&my_dev_id, 0, 1, "stred");
    if (ret){
