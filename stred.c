@@ -144,11 +144,11 @@ broj NEuspesno kopiranih bajtova)
 	  input[ret-1] = '\0';
 
 	      if(!strncmp(input,upis,strlen(upis))){   //UPIS STRINGA U BAFER
-		if(ret<= 100-pos && ret != 0)          //ima dovoljno mesta u nizu za string
+		if(ret-strlen(upis)<= 100-pos && ret != 0)   //ima dovoljno mesta u nizu za string
 		{
 		  printk(KERN_INFO "Succesfully wrote string "); 
 		        stred[0] = '\0';
-		        for(i=0; i<ret; i++)
+		        for(i=0; i<ret-strlen(upis); i++)
 			  {
 			    stred[i] = input[i+strlen(upis)];
 			  }
@@ -187,15 +187,15 @@ broj NEuspesno kopiranih bajtova)
 		stred[pos] = '\0';
 	      }else if(!strncmp(input,dodavanje,strlen(dodavanje)))//KONKATENACIJA
 	      {
-		if(ret<= 100-pos && ret != 0)//ima dovoljno mesta u nizu za string
+		if(ret-strlen(dodavanje)<= 100-pos && ret != 0)//ima dovoljno mesta u nizu za string
 		{
 		  printk(KERN_INFO "Succesfully wrote string "); 
-		  for(i=0;i<ret;i++)
-		    {
+		  for(i=0;i<ret-strlen(dodavanje);i++)
+		    {printk(KERN_INFO "%c",input[i+strlen(dodavanje)]);
 		      stred[pos+i] = input[i+strlen(dodavanje)];
 		    }
-		        pos = pos + ret;
-			stred[pos] = '\0';
+		        pos = pos + ret-strlen(dodavanje)-1;
+			//stred[pos] = '\0';
 		}
 		else if(ret == 0)
 		{
