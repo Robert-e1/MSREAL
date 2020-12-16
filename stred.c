@@ -50,6 +50,19 @@ struct file_operations my_fops =
 	.release = stred_close,
 };
 
+char *strremove(char *str, const char *sub)   //f-ja za brisanje pojave niza karaktera
+{
+  int len = strlen(sub);
+  if (len>0)
+    {
+      char *p = str;
+      while ((p = strstr(p,sub)) != NULL)
+	{
+	  memmove(p, p+ len, strlen(p+len) + 1);
+	}
+    }
+  return str;
+}
 
 int stred_open(struct inode *pinode, struct file *pfile) 
 {
@@ -87,9 +100,6 @@ ssize_t stred_read(struct file *pfile, char __user *buffer, size_t length, loff_
 
 	if(pos > 0)
 	{
-	  
-	  //int i = 0;
-	  //for(i = 0; i<pos; i++) 
 		len = scnprintf(buff, BUFF_SIZE, "%s \n", stred);
 		ret = copy_to_user(buffer, buff, len);       //procesi iz korisnickog prostora\
 nemaju pristup memorijskim adresama kernela, te se niz iz kernela kopira u korisnicki adresni\
@@ -123,16 +133,16 @@ broj NEuspesno kopiranih bajtova)
 		return -EFAULT;
 	buff[length-1] = '\0';
 
-	if(down_interruptible(&sem))
-		return -ERESTARTSYS;
-	while(pos >= 100)
-	{
-		up(&sem);
-		if(wait_event_interruptible(writeQ,(pos<100)))
-			return -ERESTARTSYS;
-		if(down_interruptible(&sem))
-			return -ERESTARTSYS;
-	}
+	//if(down_interruptible(&sem))
+	//	return -ERESTARTSYS;
+	//while(pos >= 100)
+	//{
+	//	up(&sem);
+	//	if(wait_event_interruptible(writeQ,(pos<100)))
+	//		return -ERESTARTSYS;
+	//	if(down_interruptible(&sem))
+	//		return -ERESTARTSYS;
+	//}
 
 	if(pos<100)
 	{
@@ -144,7 +154,7 @@ broj NEuspesno kopiranih bajtova)
 	  input[ret-1] = '\0';
 
 	      if(!strncmp(input,upis,strlen(upis))){   //UPIS STRINGA U BAFER
-		if(ret-strlen(upis)<= 100-pos && ret != 0)   //ima dovoljno mesta u nizu za string
+		if(ret-strlen(upis)<= 100-pos)   //ima dovoljno mesta u nizu za string
 		{
 		  printk(KERN_INFO "Succesfully wrote string "); 
 		        stred[0] = '\0';
@@ -154,19 +164,17 @@ broj NEuspesno kopiranih bajtova)
 			  }
 			pos=strlen(stred);
 			stred[pos] = '\0';
-		}
-		else if(ret == 0)
-		{
-			printk(KERN_WARNING "Failed to write string\n");
+			printk(KERN_INFO "pos = %d",pos);
 		}
 		else
 		{
-		        printk(KERN_WARNING "Not enough space to write string");
+			printk(KERN_WARNING "Failed to write string: string is too long!\n");
 		}
 	      }else if(!strncmp(input,brisanje,strlen(brisanje))) //BRISANJE CITAVOG STRINGA
 	      {
 		stred[0] = '\0';
 		pos = 0;
+		printk(KERN_INFO "pos = %d",pos);
 	      }else if(!strncmp(input,brisanje_space,strlen(brisanje_space)))//BRISANJE SPACE-ova
 	      {
 		int i = 0;
@@ -185,26 +193,37 @@ broj NEuspesno kopiranih bajtova)
 		  pos--;
 		}
 		stred[pos] = '\0';
+		printk(KERN_INFO "String succesfully shrunk!\n");
+		printk(KERN_INFO "pos= %d \n",pos);
+		
 	      }else if(!strncmp(input,dodavanje,strlen(dodavanje)))//KONKATENACIJA
 	      {
-		if(ret-strlen(dodavanje)<= 100-pos && ret != 0)//ima dovoljno mesta u nizu za string
-		{
-		  printk(KERN_INFO "Succesfully wrote string "); 
+	   
+		  if(down_interruptible(&sem))
+			  return -ERESTARTSYS;
+		  while(pos >= 100 || length-strlen(dodavanje) >= 100-pos)
+	                {
+		          up(&sem);
+		  if(wait_event_interruptible(writeQ,(pos<100 || ret-strlen(dodavanje) < 100-pos)))
+			      return -ERESTARTSYS;
+		  if(down_interruptible(&sem))
+			      return -ERESTARTSYS;
+	                }
+
+		  printk(KERN_INFO "String appended succesfully!\n");
+     
 		  for(i=0;i<ret-strlen(dodavanje);i++)
-		    {printk(KERN_INFO "%c",input[i+strlen(dodavanje)]);
+		    {
+		      //printk(KERN_INFO "%c",input[i+strlen(dodavanje)]);
 		      stred[pos+i] = input[i+strlen(dodavanje)];
 		    }
 		        pos = pos + ret-strlen(dodavanje)-1;
-			//stred[pos] = '\0';
-		}
-		else if(ret == 0)
-		{
-			printk(KERN_WARNING "Failed to write string\n");
-		}
-		else
-		{
-		        printk(KERN_WARNING "Not enough space to write string");
-		}
+			printk(KERN_INFO "pos= %d",pos);
+			//}
+			//else
+			//{
+			//printk(KERN_WARNING "Failed to write string: string will be appended once enough space is available\n");
+			//	        }
 
 	      }else if(!strncmp(input,brisanje_br_kar,strlen(brisanje_br_kar)))//BRISANJE KARAKTERA
 	      {
@@ -215,6 +234,8 @@ broj NEuspesno kopiranih bajtova)
 		if(pos < 0)
 		  pos = 0;
 		stred[pos] = '\0';
+		printk(KERN_INFO "Succesfully deleted last %d characters!\n",br);
+		printk(KERN_INFO "pos = %d",pos);
 	      }else if(!strncmp(input,brisanje_pojave,strlen(brisanje_pojave)))//BRISANJE POJAVE
 	      {
 		char needle[] = {0};
@@ -222,14 +243,14 @@ broj NEuspesno kopiranih bajtova)
 		  {
 		    needle[i] = input[i+strlen(brisanje_pojave)];
 		  }
-		needle[strlen(brisanje_pojave)] = '\0';
-		//while(strstr(stred,needle) != null)
-		//{
-		  
-		//}
+		needle[strlen(input)-strlen(brisanje_pojave)] = '\0';
+		strremove(stred,needle);
+		pos = strlen(stred);
+		printk(KERN_INFO "Succesfully removed substring %s",needle);
+		printk(KERN_INFO "pos = %d",pos);
 	      }else
               {
-		printk(KERN_WARNING "Lose formatirana komanda!");
+		printk(KERN_WARNING "Lose formatirana komanda!\n");
 	      }//kraj bloka za formtiranje stringa
 	}
 	      
