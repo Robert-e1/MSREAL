@@ -44,12 +44,14 @@ int main()
 	    }
 	  str = (char*)malloc(str_bytes);
 	  getline(&str,&str_bytes,fp);
+	  getline(&str,&str_bytes,fp);
 	  if(fclose(fp))
 	    {
 	      printf("Failed to close /dev/stred\n");
 	      return -1;
 	    }
-	  printf("Sadrzaj stringa je: %s\n\n\n", str);
+	  printf("Sadrzaj stringa je: %s \n\n\n", str);
+	  
 	  free(str);
 	  
 	  break;  
